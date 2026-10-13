@@ -76,7 +76,7 @@ struct trapframe {
   /* 280 */ uint64 t6;
 };
 
-enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
+enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE, STOPPED };
 
 // Per-process state
 struct proc {
@@ -85,9 +85,13 @@ struct proc {
   // p->lock must be held when using these:
   enum procstate state; // Process state
   void *chan;           // If non-zero, sleeping on chan
-  int killed;           // If non-zero, have been killed
+  int killed;           // If non-zero, killed by this signal number
   int xstate;           // Exit status to be returned to parent's wait
   int pid;              // Process ID
+  int pgid;             // Process group ID (job control)
+  int pendstop;         // Stop signal received but not yet acted on (0 = none)
+  int stopsig;          // Stopped by this signal; parent not yet told (0 = none)
+  uint sigignore;       // Bitmask of signals this process ignores
 
   // wait_lock must be held when using this:
   struct proc *parent; // Parent process

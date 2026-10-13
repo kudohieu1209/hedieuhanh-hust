@@ -376,6 +376,7 @@ sys_open(void)
   if (ip->type == T_DEVICE) {
     f->type = FD_DEVICE;
     f->major = ip->major;
+    f->minor = ip->minor;
   } else {
     f->type = FD_INODE;
     f->off = 0;
@@ -527,4 +528,20 @@ sys_pipe(void)
     return -1;
   }
   return 0;
+}
+
+// ioctl(fd, request, arg): device control, used for terminal
+// modes and the foreground process group (see termios.h).
+uint64
+sys_ioctl(void)
+{
+  struct file *f;
+  int req;
+  uint64 arg;
+
+  if (argfd(0, 0, &f) < 0)
+    return -1;
+  argint(1, &req);
+  argaddr(2, &arg);
+  return fileioctl(f, req, arg);
 }

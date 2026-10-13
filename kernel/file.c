@@ -101,6 +101,17 @@ filestat(struct file *f, uint64 addr)
   return -1;
 }
 
+// Device-specific control operation on file f (e.g. terminal modes).
+// arg is a user virtual address.
+int
+fileioctl(struct file *f, int req, uint64 arg)
+{
+  if (f->type != FD_DEVICE || f->major < 0 || f->major >= NDEV ||
+      !devsw[f->major].ioctl)
+    return -1;
+  return devsw[f->major].ioctl(f->minor, req, arg);
+}
+
 // Read from file f.
 // addr is a user virtual address.
 int
@@ -116,7 +127,7 @@ fileread(struct file *f, uint64 addr, int n)
   } else if (f->type == FD_DEVICE) {
     if (f->major < 0 || f->major >= NDEV || !devsw[f->major].read)
       return -1;
-    r = devsw[f->major].read(1, addr, n);
+    r = devsw[f->major].read(f->minor, 1, addr, n);
   } else if (f->type == FD_INODE) {
     ilock(f->ip);
     if ((r = readi(f->ip, 1, addr, f->off, n)) > 0)
@@ -144,7 +155,7 @@ filewrite(struct file *f, uint64 addr, int n)
   } else if (f->type == FD_DEVICE) {
     if (f->major < 0 || f->major >= NDEV || !devsw[f->major].write)
       return -1;
-    ret = devsw[f->major].write(1, addr, n);
+    ret = devsw[f->major].write(f->minor, 1, addr, n);
   } else if (f->type == FD_INODE) {
     // write a few blocks at a time to avoid exceeding
     // the maximum log transaction size, including

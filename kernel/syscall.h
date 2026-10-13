@@ -21,3 +21,9 @@
 #define SYS_mkdir  20
 #define SYS_close  21
 #define SYS_sync   22
+#define SYS_waitpid 23
+#define SYS_sigsend 24
+#define SYS_signal  25
+#define SYS_setpgid 26
+#define SYS_getpgid 27
+#define SYS_ioctl   28

@@ -87,6 +87,13 @@ pipewrite(struct pipe *pi, uint64 addr, int n)
     }
     if (pi->nwrite == pi->nread + PIPESIZE) { //DOC: pipewrite-full
       wakeup(&pi->nread);
+      if (stoppending(pr)) {
+        // job control: stop while the pipe is full.
+        release(&pi->lock);
+        stopcheck();
+        acquire(&pi->lock);
+        continue;
+      }
       sleep_prepare(&pi->nwrite);
       release(&pi->lock);
       sleep();
@@ -120,6 +127,13 @@ piperead(struct pipe *pi, uint64 addr, int n)
     if (killed(pr)) {
       release(&pi->lock);
       return -1;
+    }
+    if (stoppending(pr)) {
+      // job control: stop while the pipe is empty.
+      release(&pi->lock);
+      stopcheck();
+      acquire(&pi->lock);
+      continue;
     }
     sleep_prepare(&pi->nread); //DOC: piperead-sleep
     release(&pi->lock);

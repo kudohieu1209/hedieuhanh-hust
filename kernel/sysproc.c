@@ -80,6 +80,13 @@ sys_pause(void)
       release(&tickslock);
       return -1;
     }
+    if (stoppending(myproc())) {
+      // Ctrl-Z while sleeping: stop now, keep sleeping after SIGCONT.
+      release(&tickslock);
+      stopcheck();
+      acquire(&tickslock);
+      continue;
+    }
     sleep_prepare(&ticks);
     release(&tickslock);
     sleep();
@@ -96,6 +103,62 @@ sys_kill(void)
 
   argint(0, &pid);
   return kkill(pid);
+}
+
+// waitpid(pid, &status, options)
+uint64
+sys_waitpid(void)
+{
+  int pid, options;
+  uint64 addr;
+
+  argint(0, &pid);
+  argaddr(1, &addr);
+  argint(2, &options);
+  return kwaitpid(pid, addr, options, 1);
+}
+
+// sigsend(pid, sig): pid > 0 one process, pid < 0 process group -pid.
+uint64
+sys_sigsend(void)
+{
+  int pid, sig;
+
+  argint(0, &pid);
+  argint(1, &sig);
+  return ksignal(pid, sig);
+}
+
+// signal(sig, SIG_DFL or SIG_IGN)
+uint64
+sys_signal(void)
+{
+  int sig, disp;
+
+  argint(0, &sig);
+  argint(1, &disp);
+  return ksigdisp(sig, disp);
+}
+
+// setpgid(pid, pgid)
+uint64
+sys_setpgid(void)
+{
+  int pid, pgid;
+
+  argint(0, &pid);
+  argint(1, &pgid);
+  return ksetpgid(pid, pgid);
+}
+
+// getpgid(pid)
+uint64
+sys_getpgid(void)
+{
+  int pid;
+
+  argint(0, &pid);
+  return kgetpgid(pid);
 }
 
 // return how many clock tick interrupts have occurred

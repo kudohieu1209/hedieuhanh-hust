@@ -5,6 +5,8 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "signal.h"
+#include "wait.h"
 
 struct cpu cpus[NCPU];
 
@@ -167,6 +169,10 @@ freeproc(struct proc *p)
   p->chan = 0;
   p->killed = 0;
   p->xstate = 0;
+  p->pgid = 0;
+  p->pendstop = 0;
+  p->stopsig = 0;
+  p->sigignore = 0;
   p->state = UNUSED;
 }
 
@@ -222,6 +228,7 @@ userinit(void)
 
   p = allocproc();
   initproc = p;
+  p->pgid = p->pid; // init leads process group 1
 
   p->cwd = namei("/");
 
@@ -289,6 +296,11 @@ kfork(void)
 
   safestrcpy(np->name, p->name, sizeof(p->name));
 
+  // a child starts in its parent's process group and keeps
+  // the parent's list of ignored signals.
+  np->pgid = p->pgid;
+  np->sigignore = p->sigignore;
+
   pid = np->pid;
 
   release(&np->lock);
@@ -314,6 +326,12 @@ reparent(struct proc *p)
   for (pp = proc; pp < &proc[NPROC]; pp++) {
     if (pp->parent == p) {
       pp->parent = initproc;
+      // nobody is left to continue a stopped orphan (init never
+      // does job control), so terminate it like Unix does with SIGHUP.
+      acquire(&pp->lock);
+      if (pp->state == STOPPED)
+        sigdeliver(pp, SIGHUP);
+      release(&pp->lock);
       wakeup(initproc);
     }
   }
@@ -364,44 +382,74 @@ kexit(int status)
   panic("zombie exit");
 }
 
-// Wait for a child process to exit and return its pid.
-// Return -1 if this process has no children.
+// Wait for a child process to change state and return its pid.
+//   pid == -1: any child; pid > 0: that child; pid < -1: any child
+//              in process group -pid.
+//   options:   WNOHANG (return 0 instead of blocking),
+//              WUNTRACED (also report children that stopped).
+//   encode:    0 = copy out the raw exit code (old wait() behaviour),
+//              1 = copy out a status word decoded by the W*() macros.
+// Return -1 if there is no matching child.
 int
-kwait(uint64 addr)
+kwaitpid(int pid, uint64 addr, int options, int encode)
 {
   struct proc *pp;
-  int havekids, pid;
+  int havekids, cpid, status;
   struct proc *p = myproc();
 
   acquire(&wait_lock);
 
   for (;;) {
-    // Scan through table looking for exited children.
+    // Scan through table looking for children that changed state.
     havekids = 0;
     for (pp = proc; pp < &proc[NPROC]; pp++) {
-      if (pp->parent == p) {
-        // make sure the child isn't still in exit() or swtch().
-        acquire(&pp->lock);
+      if (pp->parent != p)
+        continue;
+      // make sure the child isn't still in exit() or swtch().
+      acquire(&pp->lock);
+      if ((pid > 0 && pp->pid != pid) || (pid < -1 && pp->pgid != -pid)) {
+        release(&pp->lock);
+        continue;
+      }
+      havekids = 1;
 
-        havekids = 1;
-        if (pp->state == ZOMBIE) {
-          // Found one.
-          pid = pp->pid;
-          if (addr != 0 &&
-              copyout(p->pagetable, p->sz, addr, (char *)&pp->xstate,
-                      sizeof(pp->xstate)) < 0) {
-            release(&pp->lock);
-            release(&wait_lock);
-            return -1;
-          }
-          pp->parent = 0;
-          freeproc(pp);
+      if (pp->state == ZOMBIE) {
+        // Found one that exited.
+        cpid = pp->pid;
+        if (!encode)
+          status = pp->xstate;
+        else if (pp->killed)
+          status = pp->killed & 0x7f;  // killed by a signal
+        else
+          status = (pp->xstate & 0xff) << 8;
+        if (addr != 0 &&
+            copyout(p->pagetable, p->sz, addr, (char *)&status,
+                    sizeof(status)) < 0) {
           release(&pp->lock);
           release(&wait_lock);
-          return pid;
+          return -1;
         }
+        pp->parent = 0;
+        freeproc(pp);
         release(&pp->lock);
+        release(&wait_lock);
+        return cpid;
       }
+
+      if ((options & WUNTRACED) && pp->state == STOPPED && pp->stopsig) {
+        // Found one that stopped and hasn't been reported yet.
+        cpid = pp->pid;
+        status = (pp->stopsig << 8) | 0x7f;
+        pp->stopsig = 0; // report each stop only once
+        release(&pp->lock);
+        release(&wait_lock);
+        if (addr != 0 &&
+            copyout(p->pagetable, p->sz, addr, (char *)&status,
+                    sizeof(status)) < 0)
+          return -1;
+        return cpid;
+      }
+      release(&pp->lock);
     }
 
     // No point waiting if we don't have any children.
@@ -410,12 +458,33 @@ kwait(uint64 addr)
       return -1;
     }
 
-    // Wait for a child to exit.
+    if (options & WNOHANG) {
+      release(&wait_lock);
+      return 0;
+    }
+
+    // We may have been told to stop (e.g. a shell running a
+    // pipeline got Ctrl-Z); do that before going back to sleep.
+    if (stoppending(p)) {
+      release(&wait_lock);
+      stopcheck();
+      acquire(&wait_lock);
+      continue;
+    }
+
+    // Wait for a child to exit or stop.
     sleep_prepare(p); //DOC: wait-sleep
     release(&wait_lock);
     sleep();
     acquire(&wait_lock);
   }
+}
+
+// Old-style wait(): any child, block, raw exit code.
+int
+kwait(uint64 addr)
+{
+  return kwaitpid(-1, addr, 0, 0);
 }
 
 // Per-CPU process scheduler.
@@ -594,6 +663,79 @@ wakeup(void *chan)
   }
 }
 
+// Deliver signal sig to process p.  Caller must hold p->lock.
+// Only default actions exist: terminate, stop, or continue.
+// Safe to call from interrupt context (Ctrl-C / Ctrl-Z).
+void
+sigdeliver(struct proc *p, int sig)
+{
+  if (sig <= 0 || sig >= NSIG || p->state == UNUSED || p->state == ZOMBIE)
+    return;
+
+  if (sig == SIGKILL) {
+    // cannot be ignored; even a stopped process must wake up to die.
+    p->killed = SIGKILL;
+    p->pendstop = 0;
+    if (p->state == SLEEPING || p->state == STOPPED)
+      p->state = RUNNABLE;
+    return;
+  }
+
+  if (sig == SIGCONT) {
+    // continue even if ignored; cancel any stop not yet acted on.
+    p->pendstop = 0;
+    if (p->state == STOPPED) {
+      p->stopsig = 0;
+      p->state = RUNNABLE;
+    }
+    return;
+  }
+
+  if (sig != SIGSTOP && (p->sigignore & (1 << sig)))
+    return; // ignored
+
+  if (sig == SIGSTOP || sig == SIGTSTP || sig == SIGTTIN || sig == SIGTTOU) {
+    // remember it; the process stops itself in stopcheck(),
+    // at a point where it holds no locks.
+    if (p->state != STOPPED)
+      p->pendstop = sig;
+  } else {
+    // default action of every other signal: terminate.
+    // the process exits next time it heads back to user space.
+    if (p->killed == 0)
+      p->killed = sig;
+  }
+
+  // wake it from sleep() so it notices soon. A stopped process
+  // stays stopped: it will see p->killed after SIGCONT.
+  if (p->state == SLEEPING)
+    p->state = RUNNABLE;
+}
+
+// Send sig to process pid (pid > 0) or to every process in
+// process group -pid (pid < 0).  Never signals init.
+// Returns 0 if at least one process was found, -1 otherwise.
+int
+ksignal(int pid, int sig)
+{
+  struct proc *p;
+  int found = -1;
+
+  if (pid == 0 || sig <= 0 || sig >= NSIG)
+    return -1;
+
+  for (p = proc; p < &proc[NPROC]; p++) {
+    acquire(&p->lock);
+    if (p != initproc && p->state != UNUSED &&
+        ((pid > 0 && p->pid == pid) || (pid < 0 && p->pgid == -pid))) {
+      sigdeliver(p, sig);
+      found = 0;
+    }
+    release(&p->lock);
+  }
+  return found;
+}
+
 // Kill the process with the given pid.
 // The victim won't exit until it tries to return
 // to user space (see usertrap() in trap.c).
@@ -607,12 +749,8 @@ kkill(int pid)
 
   for (p = proc; p < &proc[NPROC]; p++) {
     acquire(&p->lock);
-    if (p->pid == pid) {
-      p->killed = 1;
-      if (p->state == SLEEPING) {
-        // Wake process from sleep().
-        p->state = RUNNABLE;
-      }
+    if (p->pid == pid && p->state != UNUSED) {
+      sigdeliver(p, SIGKILL);
       release(&p->lock);
       return 0;
     }
@@ -625,7 +763,7 @@ void
 setkilled(struct proc *p)
 {
   acquire(&p->lock);
-  p->killed = 1;
+  p->killed = SIGSEGV; // only used for bad traps
   release(&p->lock);
 }
 
@@ -638,6 +776,124 @@ killed(struct proc *p)
   k = p->killed;
   release(&p->lock);
   return k;
+}
+
+// Has p been asked to stop (and not killed)?
+int
+stoppending(struct proc *p)
+{
+  int s;
+
+  acquire(&p->lock);
+  s = p->pendstop && !p->killed;
+  release(&p->lock);
+  return s;
+}
+
+// If the current process has a pending stop signal, stop it here
+// until SIGCONT (or SIGKILL) arrives.  Called only at safe points
+// where the caller holds no locks: on the way back to user space,
+// and inside a few interruptible waits (console, pipe, pause, wait).
+void
+stopcheck(void)
+{
+  struct proc *p = myproc();
+
+  if (!stoppending(p))
+    return;
+
+  acquire(&wait_lock);
+
+  // parent might be sleeping in waitpid(WUNTRACED).
+  // (same order as kexit(): wake the parent first, then mark
+  // ourselves; the parent can't look until we drop wait_lock.)
+  wakeup(p->parent);
+
+  acquire(&p->lock);
+  if (p->pendstop && !p->killed) {
+    p->stopsig = p->pendstop;
+    p->pendstop = 0;
+    p->state = STOPPED;
+    release(&wait_lock);
+    // give up the CPU; the scheduler ignores STOPPED processes,
+    // so we sleep here until sigdeliver() makes us RUNNABLE.
+    sched();
+  } else {
+    release(&wait_lock); // SIGCONT/SIGKILL got here first
+  }
+  release(&p->lock);
+}
+
+// Put process pid (0 = caller) into process group pgid
+// (0 = a new group whose ID is pid).  Only the caller itself
+// or one of its children may be moved.
+int
+ksetpgid(int pid, int pgid)
+{
+  struct proc *me = myproc();
+  struct proc *p;
+  int r = -1;
+
+  if (pid < 0 || pgid < 0)
+    return -1;
+  if (pid == 0)
+    pid = me->pid;
+  if (pgid == 0)
+    pgid = pid;
+
+  acquire(&wait_lock); // protects p->parent
+  for (p = proc; p < &proc[NPROC]; p++) {
+    acquire(&p->lock);
+    if (p->pid == pid && p->state != UNUSED && p->state != ZOMBIE &&
+        (p == me || p->parent == me)) {
+      p->pgid = pgid;
+      r = 0;
+    }
+    release(&p->lock);
+  }
+  release(&wait_lock);
+  return r;
+}
+
+// Return the process group of process pid (0 = caller).
+int
+kgetpgid(int pid)
+{
+  struct proc *p;
+  int r = -1;
+
+  if (pid == 0)
+    pid = myproc()->pid;
+  for (p = proc; p < &proc[NPROC]; p++) {
+    acquire(&p->lock);
+    if (p->pid == pid && p->state != UNUSED)
+      r = p->pgid;
+    release(&p->lock);
+  }
+  return r;
+}
+
+// Set the caller's disposition for sig to SIG_DFL or SIG_IGN.
+// Returns the old disposition. SIGKILL and SIGSTOP can't be ignored.
+int
+ksigdisp(int sig, int disp)
+{
+  struct proc *p = myproc();
+  int old;
+
+  if (sig <= 0 || sig >= NSIG || sig == SIGKILL || sig == SIGSTOP)
+    return -1;
+  if (disp != SIG_DFL && disp != SIG_IGN)
+    return -1;
+
+  acquire(&p->lock);
+  old = (p->sigignore & (1 << sig)) ? SIG_IGN : SIG_DFL;
+  if (disp == SIG_IGN)
+    p->sigignore |= (1 << sig);
+  else
+    p->sigignore &= ~(1 << sig);
+  release(&p->lock);
+  return old;
 }
 
 // Copy to either a user address, or kernel address,
@@ -683,13 +939,14 @@ procdump(void)
     [SLEEPING]  = "sleep ",
     [RUNNABLE]  = "runble",
     [RUNNING]   = "run   ",
-    [ZOMBIE]    = "zombie"
+    [ZOMBIE]    = "zombie",
+    [STOPPED]   = "stop  "
     // clang-format on
   };
   struct proc *p;
   char *state;
 
-  printk("\n");
+  printk("\npid pgid state name\n");
   for (p = proc; p < &proc[NPROC]; p++) {
     if (p->state == UNUSED)
       continue;
@@ -697,7 +954,7 @@ procdump(void)
       state = states[p->state];
     else
       state = "???";
-    printk("%d %s %s", p->pid, state, p->name);
+    printk("%d %d %s %s", p->pid, p->pgid, state, p->name);
     printk("\n");
   }
 }

@@ -34,6 +34,7 @@ void            fileinit(void);
 int             fileread(struct file*, uint64, int n);
 int             filestat(struct file*, uint64 addr);
 int             filewrite(struct file*, uint64, int n);
+int             fileioctl(struct file*, int, uint64);
 
 // fs.c
 void            fsinit(int);
@@ -98,6 +99,14 @@ void            sleep_prepare(void*);
 void            sleep(void);
 void            userinit(void);
 int             kwait(uint64);
+int             kwaitpid(int, uint64, int, int);
+void            sigdeliver(struct proc*, int);
+int             ksignal(int, int);
+int             stoppending(struct proc*);
+void            stopcheck(void);
+int             ksetpgid(int, int);
+int             kgetpgid(int);
+int             ksigdisp(int, int);
 void            wakeup(void*);
 void            yield(void);
 int             either_copyout(int user_dst, uint64 dst, void *src, uint64 len);
