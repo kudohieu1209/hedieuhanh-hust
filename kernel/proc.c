@@ -327,10 +327,13 @@ reparent(struct proc *p)
     if (pp->parent == p) {
       pp->parent = initproc;
       // nobody is left to continue a stopped orphan (init never
-      // does job control), so terminate it like Unix does with SIGHUP.
+      // does job control), so do what Unix does: SIGHUP to make it
+      // exit, then SIGCONT so that it runs and notices the SIGHUP.
       acquire(&pp->lock);
-      if (pp->state == STOPPED)
+      if (pp->state == STOPPED) {
         sigdeliver(pp, SIGHUP);
+        sigdeliver(pp, SIGCONT);
+      }
       release(&pp->lock);
       wakeup(initproc);
     }
