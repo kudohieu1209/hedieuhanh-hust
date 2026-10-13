@@ -3,6 +3,7 @@
 #include "kernel/fcntl.h"
 #include "kernel/riscv.h"
 #include "kernel/vm.h"
+#include "kernel/termios.h"
 #include "user/user.h"
 
 //
@@ -159,4 +160,45 @@ char *
 sbrklazy(int n)
 {
   return sys_sbrk(n, SBRK_LAZY);
+}
+
+// Terminal helpers (thin wrappers around ioctl, like POSIX).
+
+int
+tcgetattr(int fd, struct termios *t)
+{
+  return ioctl(fd, TCGETS, t);
+}
+
+int
+tcsetattr(int fd, struct termios *t)
+{
+  return ioctl(fd, TCSETS, t);
+}
+
+// Return the foreground process group of the terminal on fd.
+int
+tcgetpgrp(int fd)
+{
+  int pgid;
+
+  if (ioctl(fd, TIOCGPGRP, &pgid) < 0)
+    return -1;
+  return pgid;
+}
+
+// Make pgid the foreground process group of the terminal on fd.
+int
+tcsetpgrp(int fd, int pgid)
+{
+  return ioctl(fd, TIOCSPGRP, &pgid);
+}
+
+// Is fd a terminal?
+int
+isatty(int fd)
+{
+  struct termios t;
+
+  return tcgetattr(fd, &t) == 0;
 }

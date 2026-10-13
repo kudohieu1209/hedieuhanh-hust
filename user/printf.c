@@ -6,10 +6,26 @@
 
 static char digits[] = "0123456789ABCDEF";
 
+// Output of one printf() call is collected here and written with
+// as few write()s as possible, so that lines printed by different
+// processes sharing the terminal don't get mixed up letter by letter.
+static char obuf[128];
+static int olen;
+
+static void
+flush(int fd)
+{
+  if (olen > 0)
+    write(fd, obuf, olen);
+  olen = 0;
+}
+
 static void
 putc(int fd, char c)
 {
-  write(fd, &c, 1);
+  if (olen == sizeof(obuf))
+    flush(fd);
+  obuf[olen++] = c;
 }
 
 static void
@@ -56,6 +72,7 @@ vprintf(int fd, const char *fmt, va_list ap)
   int c0, c1, c2, i, state;
 
   state = 0;
+  olen = 0;
   for (i = 0; fmt[i]; i++) {
     c0 = fmt[i] & 0xff;
     if (state == 0) {
@@ -114,6 +131,7 @@ vprintf(int fd, const char *fmt, va_list ap)
       state = 0;
     }
   }
+  flush(fd);
 }
 
 void
