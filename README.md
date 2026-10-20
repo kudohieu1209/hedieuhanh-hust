@@ -1,12 +1,5 @@
 # xv6-riscv: TTY Layer & Job Control (Đề tài #27)
 
-> **Môn học:** Hệ điều hành (Operating Systems) — Đại học Bách khoa Hà Nội (HUST)  
-> **Sinh viên:** Mai Duy Hiếu  
-> **MSSV:** 20223967  
-> **Mã nguồn gốc:** `mit-pdos/xv6-riscv` (commit `06aad25`)
-
----
-
 ## 📌 Tổng quan đề tài
 
 Dự án hiện thực hóa lớp điều khiển thiết bị đầu cuối (**TTY Layer**) và cơ chế quản lý công việc (**Job Control**) trên hệ điều hành giáo trình **xv6-riscv**, mô phỏng các tính năng cốt lõi của các hệ điều hành họ Unix/Linux chuẩn POSIX.
