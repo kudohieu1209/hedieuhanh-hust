@@ -1,4 +1,4 @@
-# xv6-riscv: TTY Layer & Job Control (Đề tài #27)
+# xv6-riscv: TTY Layer & Job Control
 
 ## 📌 Tổng quan đề tài
 
