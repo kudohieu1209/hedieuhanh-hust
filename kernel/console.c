@@ -367,7 +367,6 @@ consoleintr(int c)
     return;
   }
 
-
   if (!(t->lflag & ICANON)) {
     // raw mode: no line editing; every byte can be read at once.
     if (c != 0 && t->e - t->r < INPUT_BUF_SIZE) {
@@ -383,8 +382,7 @@ consoleintr(int c)
 
   switch (c) {
   case C('U'): // Kill line.
-    while (t->e != t->w &&
-           t->buf[(t->e - 1) % INPUT_BUF_SIZE] != '\n') {
+    while (t->e != t->w && t->buf[(t->e - 1) % INPUT_BUF_SIZE] != '\n') {
       t->e--;
       echoerase(t);
     }

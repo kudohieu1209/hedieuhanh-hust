@@ -218,8 +218,8 @@ printjob(struct job *j)
     s = WTERMSIG(j->status) == SIGINT ? "Interrupted" : "Killed";
   else
     s = "Done";
-  printf("[%d]%c %s\t%s%s\n", j->id, j->id == curjob ? '+' : ' ', s,
-         j->cmd, j->state == JOB_RUNNING ? " &" : "");
+  printf("[%d]%c %s\t%s%s\n", j->id, j->id == curjob ? '+' : ' ', s, j->cmd,
+         j->state == JOB_RUNNING ? " &" : "");
 }
 
 // record a status returned by waitpid() for job j.
@@ -503,7 +503,7 @@ int
 getcmd(char *buf, int nbuf)
 {
   if (interactive) {
-    listjobs(0); // e.g. "[1]  Done  counter 3"
+    listjobs(0);              // e.g. "[1]  Done  counter 3"
     tcsetpgrp(0, shell_pgid); // in case a job took the terminal
     memset(buf, 0, nbuf);
     return readline(buf, nbuf) < 0 ? -1 : 0;

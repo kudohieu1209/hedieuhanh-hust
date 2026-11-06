@@ -5,14 +5,15 @@
 #include "kernel/types.h"
 #include "user/user.h"
 
+// global, so newer GCCs don't flag it as "set but not used" (-Werror on macOS CI).
+volatile unsigned long spin_sum;
+
 int
 main(int argc, char *argv[])
 {
-  volatile unsigned long x = 0;
-
   for (;;) {
     for (int i = 0; i < 100000000; i++)
-      x += i;
+      spin_sum += i;
     write(1, ".", 1);
   }
 }

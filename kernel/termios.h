@@ -5,9 +5,10 @@ struct termios {
 };
 
 // lflag bits
-#define ECHO   0x1 // echo typed characters back to the screen
-#define ICANON 0x2 // canonical ("cooked") mode: line editing, read() returns whole lines
-#define ISIG   0x4 // Ctrl-C / Ctrl-Z generate SIGINT / SIGTSTP
+#define ECHO 0x1 // echo typed characters back to the screen
+#define ICANON                                                                 \
+  0x2 // canonical ("cooked") mode: line editing, read() returns whole lines
+#define ISIG 0x4 // Ctrl-C / Ctrl-Z generate SIGINT / SIGTSTP
 
 // common modes
 #define TTY_COOKED (ECHO | ICANON | ISIG)

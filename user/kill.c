@@ -11,9 +11,8 @@ struct {
   char *name;
   int sig;
 } signames[] = {
-  {"HUP", SIGHUP},   {"INT", SIGINT},   {"KILL", SIGKILL},
-  {"TERM", SIGTERM}, {"CONT", SIGCONT}, {"STOP", SIGSTOP},
-  {"TSTP", SIGTSTP}, {"TTIN", SIGTTIN},
+  {"HUP", SIGHUP},   {"INT", SIGINT},   {"KILL", SIGKILL}, {"TERM", SIGTERM},
+  {"CONT", SIGCONT}, {"STOP", SIGSTOP}, {"TSTP", SIGTSTP}, {"TTIN", SIGTTIN},
 };
 
 int

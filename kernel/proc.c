@@ -422,12 +422,11 @@ kwaitpid(int pid, uint64 addr, int options, int encode)
         if (!encode)
           status = pp->xstate;
         else if (pp->killed)
-          status = pp->killed & 0x7f;  // killed by a signal
+          status = pp->killed & 0x7f; // killed by a signal
         else
           status = (pp->xstate & 0xff) << 8;
-        if (addr != 0 &&
-            copyout(p->pagetable, p->sz, addr, (char *)&status,
-                    sizeof(status)) < 0) {
+        if (addr != 0 && copyout(p->pagetable, p->sz, addr, (char *)&status,
+                                 sizeof(status)) < 0) {
           release(&pp->lock);
           release(&wait_lock);
           return -1;
@@ -446,9 +445,8 @@ kwaitpid(int pid, uint64 addr, int options, int encode)
         pp->stopsig = 0; // report each stop only once
         release(&pp->lock);
         release(&wait_lock);
-        if (addr != 0 &&
-            copyout(p->pagetable, p->sz, addr, (char *)&status,
-                    sizeof(status)) < 0)
+        if (addr != 0 && copyout(p->pagetable, p->sz, addr, (char *)&status,
+                                 sizeof(status)) < 0)
           return -1;
         return cpid;
       }
