@@ -1,5 +1,20 @@
 # xv6-riscv: TTY Layer & Job Control
 
+> **Môn học:** Hệ điều hành (ET4291) — HUST — Học kỳ 2026.1  
+> **Giảng viên hướng dẫn:** TS. Phạm Văn Tiến  
+> **Đề tài #27:** TTY Layer & Job Control trên xv6-riscv  
+> **Mã nguồn gốc:** `mit-pdos/xv6-riscv` (commit `06aad25`)
+
+### 👥 Thành viên nhóm thực hiện
+
+| STT | Họ và tên | MSSV | GitHub | Nhiệm vụ chính |
+|:---:|:---|:---:|:---:|:---|
+| 1 | Mai Duy Hiếu (Trưởng nhóm) | 20223967 | [@kudohieu1209](https://github.com/kudohieu1209) | Kiến trúc TTY Layer, Signal, Shell Job Control |
+| 2 | [Họ và tên thành viên 2] | [MSSV] | [@username_ban_2](https://github.com/) | [Phân công nhiệm vụ] |
+| 3 | [Họ và tên thành viên 3] | [MSSV] | [@username_ban_3](https://github.com/) | [Phân công nhiệm vụ] |
+
+---
+
 ## 📌 Tổng quan đề tài
 
 Dự án hiện thực hóa lớp điều khiển thiết bị đầu cuối (**TTY Layer**) và cơ chế quản lý công việc (**Job Control**) trên hệ điều hành giáo trình **xv6-riscv**, mô phỏng các tính năng cốt lõi của các hệ điều hành họ Unix/Linux chuẩn POSIX.
