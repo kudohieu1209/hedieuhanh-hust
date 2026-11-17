@@ -10,7 +10,7 @@
 | STT | Họ và tên | MSSV | GitHub | Nhiệm vụ chính |
 |:---:|:---|:---:|:---:|:---|
 | 1 | Mai Duy Hiếu | 20223967 | [@kudohieu1209](https://github.com/kudohieu1209) | TTY Layer |
-| 2 | Nguyễn Huy Hoàng | [20227610] | [@nguyehuyhoang1810](https://github.com/nguyenhuyhoang1810) | [Process & Signal] |
+| 2 | Nguyễn Huy Hoàng | 20227610 | [@nguyehuyhoang1810](https://github.com/nguyenhuyhoang1810) | Process & Signal |
 | 3 | [Vũ Tuấn Anh] | [MSSV] | [@username_ban_3](https://github.com/) | [Shell & Testing] |
 
 ---
