@@ -22,7 +22,6 @@ static void freeproc(struct proc *p);
 
 extern char trampoline[]; // trampoline.S
 
-
 // giúp đảm bảo các tín hiệu đánh thức (wakeup) gửi tới tiến trình cha
 // đang gọi wait() không bị mất. giúp tuân thủ mô hình bộ nhớ
 // (memory model) khi sử dụng p->parent.
