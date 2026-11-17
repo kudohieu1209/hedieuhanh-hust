@@ -22,15 +22,16 @@ static void freeproc(struct proc *p);
 
 extern char trampoline[]; // trampoline.S
 
-// helps ensure that wakeups of wait()ing
-// parents are not lost. helps obey the
-// memory model when using p->parent.
-// must be acquired before any p->lock.
+
+// giúp đảm bảo các tín hiệu đánh thức (wakeup) gửi tới tiến trình cha
+// đang gọi wait() không bị mất. giúp tuân thủ mô hình bộ nhớ
+// (memory model) khi sử dụng p->parent.
+// phải được chiếm giữ (acquire) trước bất kỳ p->lock nào.
 struct spinlock wait_lock;
 
-// Allocate a page for each process's kernel stack.
-// Map it high in memory, followed by an invalid
-// guard page.
+// Cấp phát một trang nhớ cho ngăn xếp nhân (kernel stack) của mỗi tiến trình.
+// Ánh xạ nó lên vùng nhớ cao, theo sau bởi một trang bảo vệ
+// (guard page) không hợp lệ.
 void
 proc_mapstacks(pagetable_t kpgtbl)
 {
